@@ -1,4 +1,4 @@
-import type { Event, EventHeader } from './types.js'
+import type { Event, EventHeader } from './events.js'
 
 const NEWLINE = '\n'.charCodeAt(0)
 const UTF8_ENCODER = new TextEncoder()
@@ -15,12 +15,12 @@ class EventParser {
   private expectedDataLength = 0
   private expectedPayloadLength = 0
   private dataBuffer: Buffer = Buffer.alloc(0)
-  private payloadBuffer: Buffer = Buffer.alloc(0);
+  private payloadBuffer: Buffer = Buffer.alloc(0)
 
   /**
    * Parses incoming data and yields complete events
    */
-  *parse(chunk: Buffer): Generator<Event, void, unknown> {
+  public *parse(chunk: Buffer): Generator<Event, void, unknown> {
     this.buffer = Buffer.concat([this.buffer, chunk])
 
     while (true) {
@@ -72,7 +72,7 @@ class EventParser {
         this.buffer = this.buffer.subarray(needed)
 
         const data = UTF8_DECODER.decode(this.dataBuffer)
-        this.currentEvent.data = JSON.parse(data)
+        this.currentEvent['data'] = JSON.parse(data)
 
         if (this.expectedPayloadLength > 0) {
           this.state = 'payload'
@@ -99,7 +99,7 @@ class EventParser {
         this.payloadBuffer = Buffer.concat([this.payloadBuffer, payloadBytes])
         this.buffer = this.buffer.subarray(needed)
 
-        this.currentEvent.payload = this.payloadBuffer
+        this.currentEvent['payload'] = this.payloadBuffer
 
         // Event is complete
         yield this.currentEvent as Event

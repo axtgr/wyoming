@@ -10,7 +10,7 @@ interface TcpServerAdapterOptions extends AdapterOptions {
 class TcpServerAdapter extends Adapter<TcpServerAdapterOptions> {
   protected server?: Server
 
-  public start() {
+  protected _start() {
     return new Promise<void>((resolve, reject) => {
       if (this.server) return
 
@@ -23,18 +23,12 @@ class TcpServerAdapter extends Adapter<TcpServerAdapterOptions> {
         reject(error)
       })
 
-      this.server.listen(this.options.port, this.options.hostname, () => {
-        this.emit('start', [])
-        resolve(undefined)
-      })
+      this.server.listen(this.options.port, this.options.hostname, resolve)
     })
   }
 
-  public async stop() {
-    if (!this.server) return
-
-    await this.server.close()
-    this.emit('stop', [])
+  protected async _stop() {
+    await this.server?.close()
   }
 
   protected handleConnection(socket: Socket): void {

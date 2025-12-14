@@ -11,7 +11,7 @@ class TcpClientAdapter extends Adapter<TcpClientAdapterOptions> {
   protected socket?: Socket
   protected parser = new EventParser()
 
-  public start() {
+  protected _start() {
     return new Promise<void>((resolve, reject) => {
       if (this.socket) return
 
@@ -24,16 +24,11 @@ class TcpClientAdapter extends Adapter<TcpClientAdapterOptions> {
         this.emit('error', [error])
         reject(error)
       })
-
-      this.emit('start', [])
     })
   }
 
-  public async stop() {
-    if (!this.socket) return
-
-    await this.socket.destroy()
-    this.emit('stop', [])
+  protected async _stop() {
+    await this.socket?.destroy()
   }
 
   protected handleConnection(socket: Socket): void {
@@ -52,7 +47,6 @@ class TcpClientAdapter extends Adapter<TcpClientAdapterOptions> {
     this.emit('connect', [connection])
 
     socket.on('data', (chunk: Buffer) => {
-      console.log('data', chunk.toString())
       try {
         for (const event of parser.parse(chunk)) {
           this.emit('event', [event, connection])
