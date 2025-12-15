@@ -14,8 +14,61 @@ interface Artifact {
   version?: string
 }
 
-interface Model extends Artifact {
+interface AsrModel extends Artifact {
   languages: string[]
+}
+
+interface AsrProgram extends Artifact {
+  models: AsrModel[]
+  supports_transcript_streaming?: boolean
+}
+
+interface TtsVoiceSpeaker {
+  name: string
+}
+
+interface TtsVoice extends Artifact {
+  languages: string[]
+  speakers?: TtsVoiceSpeaker[]
+}
+
+interface TtsProgram extends Artifact {
+  voices: TtsVoice[]
+  supports_synthesize_streaming?: boolean
+}
+
+interface HandleModel extends Artifact {
+  languages: string[]
+}
+
+interface HandleProgram extends Artifact {
+  models: HandleModel[]
+  supports_handled_streaming?: boolean
+}
+
+interface WakeModel extends Artifact {
+  languages: string[]
+  phrase?: string
+}
+
+interface WakeProgram extends Artifact {
+  models: WakeModel[]
+}
+
+interface IntentModel extends Artifact {
+  languages: string[]
+}
+
+interface IntentProgram extends Artifact {
+  models: IntentModel[]
+}
+
+interface Satellite extends Artifact {
+  area?: string
+  has_vad?: boolean
+  active_wake_words?: string[]
+  max_active_wake_words?: number
+  supports_trigger?: boolean
 }
 
 interface AudioFormat {
@@ -24,7 +77,26 @@ interface AudioFormat {
   channels: number
 }
 
-interface Voice {
+interface MicProgram {
+  mic_format: AudioFormat
+}
+
+interface SndProgram {
+  snd_format: AudioFormat
+}
+
+interface Info {
+  asr?: AsrProgram[]
+  tts?: TtsProgram[]
+  handle?: HandleProgram[]
+  intent?: IntentProgram[]
+  wake?: WakeProgram[]
+  mic?: MicProgram[]
+  snd?: SndProgram[]
+  satellite?: Satellite
+}
+
+interface SynthesizeVoice {
   name?: string
   language?: string
   speaker?: string
@@ -56,22 +128,7 @@ type EventBodies = {
 
   // Info - Describe available services
   describe: EventBody
-  info: EventBody<{
-    asr?: (Artifact & { models: Model[]; supports_transcript_streaming: boolean })[]
-    tts?: (Artifact & { models: Model[]; supports_synthesize_streaming: boolean })[]
-    wake?: (Artifact & { models: Model[] })[]
-    handle?: (Artifact & { models: Model[]; supports_handled_streaming: boolean })[]
-    intent?: (Artifact & { models: Model[] })[]
-    satellite?: {
-      area?: string
-      has_vad?: boolean
-      active_wake_words?: string[]
-      max_active_wake_words?: number
-      supports_trigger: boolean
-    }
-    mic?: { mic_format: AudioFormat }[]
-    snd?: { snd_format: AudioFormat }[]
-  }>
+  info: EventBody<Info>
 
   // Speech Recognition - Transcribe audio into text
   /** Request to transcribe an audio stream */
@@ -97,10 +154,11 @@ type EventBodies = {
   // Text to Speech - Synthesize audio from text
   synthesize: EventBody<{
     text: string
-    voice?: Voice
+    voice?: SynthesizeVoice
+    context?: object
   }>
   'synthesize-start': EventBody<{
-    voice?: Voice
+    voice?: SynthesizeVoice
     context?: object
   }>
   'synthesize-chunk': EventBody<{
@@ -112,11 +170,17 @@ type EventBodies = {
   // Wake Word - Detect wake words in an audio stream
   detect: EventBody<{
     names?: string[]
+    context?: object
   }>
   detection: EventBody<{
-    name?: number
+    name?: string
+    timestamp?: number
+    speaker?: string
+    context?: object
   }>
-  'not-detected': EventBody
+  'not-detected': EventBody<{
+    context?: object
+  }>
 
   // Voice Activity Detection - Detects speech and silence in an audio stream
   'voice-started': EventBody<{
@@ -133,9 +197,9 @@ type EventBodies = {
   }>
   intent: EventBody<{
     name: string
+    entities: { name: string; value?: unknown }[]
     text?: string
     context?: object
-    entities: { name: string; value?: unknown }[]
   }>
   'not-recognized': EventBody<{
     text?: string
