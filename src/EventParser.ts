@@ -123,7 +123,7 @@ class EventParser {
       throw new Error('The "data" field of an Event must be a JSON-serializable object')
     }
 
-    if (payload !== undefined && !(data instanceof Buffer)) {
+    if (payload !== undefined && !(payload instanceof Buffer)) {
       throw new Error('The "payload" field of an Event must be a Buffer')
     }
 
