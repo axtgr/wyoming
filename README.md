@@ -3,7 +3,7 @@
 <h1 align="center">wyoming</h1>
 
 <p align="center">
-  <strong><a href="https://github.com/OHF-Voice/wyoming">Wyoming Protocol</a> Server</strong>
+  <strong><a href="https://github.com/OHF-Voice/wyoming">Wyoming Protocol</a> Server & Client</strong>
 </p>
 
 <p align="center">
@@ -13,6 +13,8 @@
 </p>
 
 <br>
+
+Work in progress.
 
 ## Quickstart
 
