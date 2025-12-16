@@ -1,7 +1,7 @@
 {
   "name": "wyoming",
   "version": "0.0.0",
-  "description": "Wyoming Protocol Server",
+  "description": "Wyoming Protocol Server and Client",
   "author": "Alex Schneider <me@schneider.ax>",
   "license": "ISC",
   "repository": "https://github.com/axtgr/wyoming",
