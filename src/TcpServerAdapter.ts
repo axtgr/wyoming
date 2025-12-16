@@ -65,11 +65,6 @@ class TcpServerAdapter extends Adapter<TcpServerAdapterOptions> {
       this.connections.delete(connection)
       this.emit('disconnect', [connection])
     })
-
-    socket.on('end', () => {
-      this.connections.delete(connection)
-      this.emit('disconnect', [connection])
-    })
   }
 }
 
