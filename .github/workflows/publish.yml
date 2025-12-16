@@ -1,0 +1,29 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*.*.*']
+
+jobs:
+  publish:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        node: [22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Make the package public
+        run: npx json -I -f package.json -e "delete this.private"
+      - name: Publish to NPM
+        run: npm publish --registry=https://registry.npmjs.org/ --//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
+      - name: Add the repository owner as the scope if it's not set
+        run: 'npx json -I -f package.json -e "this.name[0] !== ''@'' && (this.name = ''@${{ github.repository_owner }}/'' + this.name)"'
+      - name: Publish to GPR
+        run: npm publish --registry=https://npm.pkg.github.com/ --//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}
