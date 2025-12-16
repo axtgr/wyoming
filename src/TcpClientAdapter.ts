@@ -74,4 +74,4 @@ class TcpClientAdapter extends Adapter<TcpClientAdapterOptions> {
 }
 
 export default TcpClientAdapter
-export type { TcpClientAdapterOptions as TcpServerAdapterOptions }
+export type { TcpClientAdapterOptions }

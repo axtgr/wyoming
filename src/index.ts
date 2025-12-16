@@ -1,6 +1,7 @@
-import Adapter from './Adapter.js'
-import Connectable from './Connectable.js'
-import Server from './Server.js'
-
-export { Connectable, Adapter, Server }
+export type { AdapterEvents, AdapterOptions } from './Adapter.js'
+export { default as Adapter } from './Adapter.js'
+export type { ConnectableEvents, ConnectableOptions, Connection } from './Connectable.js'
+export { default as Connectable } from './Connectable.js'
 export * from './events.js'
+export type { ServerEvents, ServerOptions } from './Server.js'
+export { default as Server } from './Server.js'
