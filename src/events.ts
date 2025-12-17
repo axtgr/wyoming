@@ -77,11 +77,11 @@ interface AudioFormat {
   channels: number
 }
 
-interface MicProgram {
+interface MicProgram extends Artifact {
   mic_format: AudioFormat
 }
 
-interface SndProgram {
+interface SndProgram extends Artifact {
   snd_format: AudioFormat
 }
 
