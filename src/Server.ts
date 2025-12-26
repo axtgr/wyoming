@@ -10,13 +10,17 @@ import type { AudioFormat, Event, Events, Info } from './events.js'
 type ServerEvents = ConnectableEvents
 
 interface AudioChunk extends AudioFormat {
-  data: ArrayBufferView
+  data: ArrayBuffer
 }
 
 interface Handlers {
   ping(text?: string): string | void | Promise<string | void>
   describe(): void | Info | Promise<Info>
   transcribe(
+    audio: AudioChunk,
+    parameters: Events['transcribe']['data'],
+  ): void | Events['transcript']['data'] | Promise<void | Events['transcript']['data']>
+  transcribeStream(
     audioStream: ReadableStream<AudioChunk>,
     parameters: Events['transcribe']['data'],
   ): void | AsyncIterable<Events['transcript']['data']>
@@ -33,10 +37,53 @@ interface ServerOptions extends ConnectableOptions {
   handlers?: HandlersInit
 }
 
+function shimTranscribeStream(
+  transcribe: (
+    audio: AudioChunk,
+    parameters: Events['transcribe']['data'],
+  ) => void | Events['transcript']['data'] | Promise<void | Events['transcript']['data']>,
+) {
+  return async function* (
+    stream: ReadableStream<AudioChunk>,
+    parameters: Events['transcribe']['data'],
+  ) {
+    const audioBuffers: ArrayBuffer[] = []
+    let totalLength = 0
+    let aggregatedChunk: AudioChunk | undefined
+
+    for await (const chunk of stream) {
+      aggregatedChunk ??= {
+        rate: chunk.rate,
+        channels: chunk.channels,
+        width: chunk.width,
+      } as AudioChunk
+      audioBuffers.push(chunk.data)
+      totalLength += chunk.data.byteLength
+    }
+
+    if (!aggregatedChunk) return
+
+    const aggregatedAudio = new Uint8Array(totalLength)
+    let offset = 0
+    for (const chunk of audioBuffers) {
+      aggregatedAudio.set(new Uint8Array(chunk), offset)
+      offset += chunk.byteLength
+    }
+    aggregatedChunk.data = aggregatedAudio.buffer
+
+    const transcription = await transcribe(aggregatedChunk, parameters)
+
+    if (transcription) {
+      yield transcription
+    }
+  }
+}
+
 class ConnectionController {
   protected connection: Connection
   protected handlers: Partial<Handlers>
   protected transcriptionInputController?: ReadableStreamDefaultController<AudioChunk>
+  protected info: Info = {}
 
   constructor(connection: Connection, handlersInit?: HandlersInit) {
     this.connection = connection
@@ -44,16 +91,23 @@ class ConnectionController {
   }
 
   protected constructHandlers(handlersInit?: HandlersInit) {
+    let handlers: Partial<Handlers> = {}
+
     if (typeof handlersInit === 'function') {
       try {
         // @ts-expect-error TS(2351): This expression is not constructable. Not all constituent...
-        return new handlersInit(this.connection)
+        handlers = { ...new handlersInit(this.connection) }
       } catch (_e) {
         // @ts-expect-error TS(2349): This expression is not callable. Not all constituents of ...
-        return handlersInit(this.connection)
+        handlers = { ...handlersInit(this.connection) }
       }
     }
-    return handlersInit
+
+    if (handlers.transcribe && !handlers.transcribeStream) {
+      handlers.transcribeStream = shimTranscribeStream(handlers.transcribe)
+    }
+
+    return handlers
   }
 
   public stop() {
@@ -109,16 +163,18 @@ class ConnectionController {
   }
 
   protected async onDescribe(_event: Events['describe']) {
-    const info = await this.handlers.describe?.()
+    this.info = (await this.handlers.describe?.()) || {}
     const response: Events['info'] = {
       header: { type: 'info' },
-      data: info || {},
+      data: this.info,
     }
     this.connection.send(response)
   }
 
   protected async onTranscribe(event: Events['transcribe']) {
-    if (!this.handlers.transcribe) return
+    if (!this.handlers.transcribeStream) return
+
+    const parameters = (event.data as Events['transcribe']['data']) || {}
 
     this.stopTranscription()
 
@@ -127,8 +183,7 @@ class ConnectionController {
         this.transcriptionInputController = controller
       },
     })
-    const parameters = (event.data as Events['transcribe']['data']) || {}
-    const output = this.handlers.transcribe(input, parameters)
+    const output = this.handlers.transcribeStream(input, parameters)
 
     if (!output) return
 
