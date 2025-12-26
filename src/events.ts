@@ -295,4 +295,4 @@ type Events = {
 
 type Event<TType extends keyof EventBodies = keyof EventBodies> = Events[TType]
 
-export type { EventBody, EventHeader, Events, Event }
+export type { EventBody, EventHeader, Events, Event, Info, AudioFormat }
