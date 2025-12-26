@@ -24,7 +24,11 @@
         "useSelfClosingElements": "error",
         "useSingleVarDeclarator": "error",
         "noUnusedTemplateLiteral": "error",
-        "noInferrableTypes": "error"
+        "noInferrableTypes": "error",
+        "useConst": {
+          "level": "error",
+          "fix": "unsafe"
+        }
       },
       "complexity": {
         "noForEach": "off",
