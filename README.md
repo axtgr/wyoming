@@ -3,7 +3,7 @@
 <h1 align="center">wyoming</h1>
 
 <p align="center">
-  <strong><a href="https://github.com/OHF-Voice/wyoming">Wyoming Protocol</a> Server & Client</strong>
+  <strong>Wyoming Protocol Server & Client</strong>
 </p>
 
 <p align="center">
@@ -14,10 +14,35 @@
 
 <br>
 
-Work in progress.
+A Node/Bun implementation of a server and client for <a href="https://github.com/OHF-Voice/wyoming">Wyoming Protocol</a>. Unfinished as the protocol turned out to be a mess and isn't worth implementing.
 
 ## Quickstart
 
 ```
 npm install wyoming
+```
+
+```
+import { Server } from 'wyoming'
+import { TcpServerAdapter } from 'wyoming/tcp'
+
+const server = new Server({
+  adapters: [new TcpServerAdapter({ port: 9999 })],
+})
+
+server.on('event', (event, connection) => {
+  if (event.header.type === 'ping') {
+    connection.send({
+      header: {
+        type: 'pong'
+      },
+      data: {
+        text: event.data?.text || 'pong'
+      }
+    })
+    return
+  }
+})
+
+await server.start()
 ```
