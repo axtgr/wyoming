@@ -5,27 +5,177 @@ import Connectable, {
   type Connection,
   type EventListener,
 } from './Connectable.js'
-import type { Events, Info } from './events.js'
+import type { AudioFormat, Event, Events, Info } from './events.js'
 
 type ServerEvents = ConnectableEvents
 
-interface Handlers {
-  ping(text?: string): string | undefined | Promise<string | undefined>
-  describe(): Info | Promise<Info>
+interface AudioChunk extends AudioFormat {
+  data: ArrayBufferView
 }
+
+interface Handlers {
+  ping(text?: string): string | void | Promise<string | void>
+  describe(): void | Info | Promise<Info>
+  transcribe(
+    audioStream: ReadableStream<AudioChunk>,
+    parameters: Events['transcribe']['data'],
+  ): void | AsyncIterable<Events['transcript']['data']>
+}
+
+type HandlersInit =
+  | Partial<Handlers>
+  | ((connection: Connection) => Partial<Handlers>)
+  | ((connection: Connection) => Promise<Partial<Handlers>>)
+  | { new (connection: Connection): Partial<Handlers> }
 
 interface ServerOptions extends ConnectableOptions {
   adapters: Adapter[]
-  handlers?: Partial<Handlers>
+  handlers?: HandlersInit
+}
+
+class ConnectionController {
+  protected connection: Connection
+  protected handlers: Partial<Handlers>
+  protected transcriptionInputController?: ReadableStreamDefaultController<AudioChunk>
+
+  constructor(connection: Connection, handlersInit?: HandlersInit) {
+    this.connection = connection
+    this.handlers = this.constructHandlers(handlersInit)
+  }
+
+  protected constructHandlers(handlersInit?: HandlersInit) {
+    if (typeof handlersInit === 'function') {
+      try {
+        // @ts-expect-error TS(2351): This expression is not constructable. Not all constituent...
+        return new handlersInit(this.connection)
+      } catch (_e) {
+        // @ts-expect-error TS(2349): This expression is not callable. Not all constituents of ...
+        return handlersInit(this.connection)
+      }
+    }
+    return handlersInit
+  }
+
+  public stop() {
+    this.stopTranscription()
+  }
+
+  protected stopTranscription() {
+    if (this.transcriptionInputController?.desiredSize) {
+      this.transcriptionInputController?.close()
+      this.transcriptionInputController = undefined
+    }
+  }
+
+  public handleEvent(event: Event) {
+    const type = event.header.type
+
+    if (type === 'ping') {
+      this.onPing(event as Events['ping'])
+      return
+    }
+
+    if (type === 'describe') {
+      this.onDescribe(event as Events['describe'])
+      return
+    }
+
+    if (type === 'transcribe') {
+      this.onTranscribe(event as Events['transcribe'])
+      return
+    }
+
+    if (type === 'audio-chunk') {
+      this.onAudioChunk(event as Events['audio-chunk'])
+      return
+    }
+
+    if (type === 'audio-stop') {
+      this.onAudioStop(event as Events['audio-stop'])
+      return
+    }
+  }
+
+  protected async onPing(event: Events['ping']) {
+    const data = (event as Events['ping'] | undefined)?.data
+    const text = this.handlers.ping
+      ? (await this.handlers.ping?.(data?.text)) || ''
+      : event.data.text
+    const response: Events['pong'] = {
+      header: { type: 'pong' },
+      data: { text },
+    }
+    this.connection.send(response)
+  }
+
+  protected async onDescribe(_event: Events['describe']) {
+    const info = await this.handlers.describe?.()
+    const response: Events['info'] = {
+      header: { type: 'info' },
+      data: info || {},
+    }
+    this.connection.send(response)
+  }
+
+  protected async onTranscribe(event: Events['transcribe']) {
+    if (!this.handlers.transcribe) return
+
+    this.stopTranscription()
+
+    const input = new ReadableStream({
+      start: (controller) => {
+        this.transcriptionInputController = controller
+      },
+    })
+    const parameters = (event.data as Events['transcribe']['data']) || {}
+    const output = this.handlers.transcribe(input, parameters)
+
+    if (!output) return
+
+    const fullTranscript: Events['transcript']['data'] = { text: '' }
+    let hasStarted = false
+
+    for await (const chunk of output) {
+      if (!hasStarted) {
+        this.connection.send({
+          header: { type: 'transcript-start' },
+          data: { context: chunk.context },
+        })
+        hasStarted = true
+      }
+      fullTranscript.text += chunk.text
+      fullTranscript.language = chunk.language
+      fullTranscript.context = chunk.context
+      this.connection.send({
+        header: { type: 'transcript-chunk' },
+        data: chunk,
+      })
+    }
+    this.connection.send({
+      header: { type: 'transcript' },
+      data: fullTranscript,
+    })
+    this.connection.send({
+      header: { type: 'transcript-stop' },
+    })
+  }
+
+  protected async onAudioChunk(event: Events['audio-chunk']) {
+    if (this.transcriptionInputController?.desiredSize) {
+      this.transcriptionInputController.enqueue({ ...event.data, data: event.payload })
+    }
+  }
+
+  protected async onAudioStop(_event: Events['audio-stop']) {
+    this.stopTranscription()
+  }
 }
 
 class Server<
   TOptions extends ServerOptions = ServerOptions,
   TEvents extends ServerEvents = ServerEvents,
 > extends Connectable<TOptions, TEvents> {
-  protected handlers: Partial<Handlers> = {
-    ping: (text) => text,
-  }
+  protected connectionControllers = new Map<Connection, ConnectionController>()
 
   constructor(options: TOptions) {
     if (!Array.isArray(options?.adapters) || options.adapters.length < 1) {
@@ -33,38 +183,21 @@ class Server<
     }
     super(options)
 
-    if (options.handlers) {
-      this.handlers = { ...this.handlers, ...options.handlers }
-    }
+    this.on('connect', (connection) => {
+      const controller = new ConnectionController(connection, options.handlers)
+      this.connectionControllers.set(connection, controller)
+    })
+
+    this.on('disconnect', (connection) => {
+      const controller = this.connectionControllers.get(connection)
+      controller?.stop()
+      this.connectionControllers.delete(connection)
+    })
 
     this.on('event', async (e, connection) => {
-      this.handleEvent(e, connection)
+      const controller = this.connectionControllers.get(connection)
+      controller?.handleEvent(e)
     })
-  }
-
-  protected async handleEvent(event: TEvents['event'][0], connection: Connection) {
-    const type = event.header.type
-
-    if (type === 'ping') {
-      const data = (event as Events['ping'] | undefined)?.data
-      const text = await this.handlers.ping?.(data?.text)
-      const response: Events['pong'] = {
-        header: { type: 'pong' },
-        data: { text },
-      }
-      connection.send(response)
-      return
-    }
-
-    if (type === 'describe') {
-      const info = await this.handlers.describe?.()
-      const response: Events['info'] = {
-        header: { type: 'info' },
-        data: info || {},
-      }
-      connection.send(response)
-      return
-    }
   }
 
   protected async _start() {

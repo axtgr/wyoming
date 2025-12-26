@@ -104,7 +104,7 @@ interface SynthesizeVoice {
 
 type EventBody<
   TData extends object | undefined = undefined,
-  TPayload extends Buffer | undefined = undefined,
+  TPayload extends ArrayBufferView | undefined = undefined,
 > = (undefined extends TData
   ? {
       data?: TData
@@ -122,7 +122,7 @@ type EventBody<
 
 type EventBodies = {
   // Audio - Send raw audio and indicate begin/end of audio streams
-  'audio-chunk': EventBody<{ timestamp?: number } & AudioFormat, Buffer>
+  'audio-chunk': EventBody<{ timestamp?: number } & AudioFormat, ArrayBufferView>
   'audio-start': EventBody<{ timestamp?: number } & AudioFormat>
   'audio-stop': EventBody<{ timestamp?: number }>
 
